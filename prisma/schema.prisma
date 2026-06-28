@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  VENDOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  ASSIGNED
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationType {
+  ORDER_CONFIRMATION
+  ORDER_ASSIGNED
+  ORDER_IN_PRODUCTION
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  RETRYING
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  mobile        String?   @unique
+  password      String?
+  name          String?
+  role          Role      @default(CUSTOMER)
+  googleId      String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+  
+  orders        Order[]
+  designs       Design[]
+  cart          CartItem[]
+  sessions      Session[]
+  vendor        Vendor?
+  auditLogs     AuditLog[]
+
+  @@index([email])
+  @@index([mobile])
+}
+
+model Vendor {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  businessName    String
+  location        String
+  capacity        Int       @default(10)
+  priority        Int       @default(1)
+  isActive        Boolean   @default(true)
+  acceptanceRate  Float     @default(0)
+  avgFulfillment  Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  orders          Order[]
+
+  @@index([isActive, priority])
+}
+
+model Design {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  prompt      String
+  imageUrl    String
+  cloudinaryId String
+  aspectRatio String
+  aiProvider  String
+  createdAt   DateTime  @default(now())
+  
+  orderItems  OrderItem[]
+  cartItems   CartItem[]
+
+  @@index([userId])
+}
+
+model PrePrompt {
+  id          String   @id @default(uuid())
+  title       String
+  prompt      String
+  category    String
+  previewUrl  String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([isActive, sortOrder])
+}
+
+model Fabric {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  priceModifier Float    @default(0)
+  isActive      Boolean  @default(true)
+  
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
+}
+
+model GSM {
+  id            String   @id @default(uuid())
+  value         Int      @unique
+  priceModifier Float    @default(0)
+  isActive      Boolean  @default(true)
+  
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
+}
+
+model Size {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  priceModifier Float    @default(0)
+  isActive      Boolean  @default(true)
+  
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
+}
+
+model Color {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  hexCode       String
+  priceModifier Float    @default(0)
+  isActive      Boolean  @default(true)
+  
+  orderItems    OrderItem[]
+  cartItems     CartItem[]
+}
+
+model Pricing {
+  id            String   @id @default(uuid())
+  basePrice     Float
+  effectiveFrom DateTime @default(now())
+  isActive      Boolean  @default(true)
+
+  @@index([isActive, effectiveFrom])
+}
+
+model CartItem {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  designId    String
+  design      Design   @relation(fields: [designId], references: [id])
+  fabricId    String
+  fabric      Fabric   @relation(fields: [fabricId], references: [id])
+  gsmId       String
+  gsm         GSM      @relation(fields: [gsmId], references: [id])
+  sizeId      String
+  size        Size     @relation(fields: [sizeId], references: [id])
+  colorId     String
+  color       Color    @relation(fields: [colorId], references: [id])
+  quantity    Int      @default(1)
+  price       Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([userId, designId, fabricId, gsmId, sizeId, colorId])
+  @@index([userId])
+}
+
+model Order {
+  id                String      @id @default(uuid())
+  orderNumber       String      @unique
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  vendorId          String?
+  vendor            Vendor?     @relation(fields: [vendorId], references: [id])
+  status            OrderStatus @default(PENDING)
+  totalAmount       Float
+  paymentId         String?
+  paymentStatus     PaymentStatus @default(PENDING)
+  shippingAddress   Json
+  trackingNumber    String?
+  estimatedDelivery DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  items             OrderItem[]
+  statusHistory     OrderStatusHistory[]
+  notifications     Notification[]
+  printFile         PrintFile?
+
+  @@index([userId])
+  @@index([vendorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  designId    String
+  design      Design   @relation(fields: [designId], references: [id])
+  fabricId    String
+  fabric      Fabric   @relation(fields: [fabricId], references: [id])
+  gsmId       String
+  gsm         GSM      @relation(fields: [gsmId], references: [id])
+  sizeId      String
+  size        Size     @relation(fields: [sizeId], references: [id])
+  colorId     String
+  color       Color    @relation(fields: [colorId], references: [id])
+  quantity    Int
+  price       Float
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model PrintFile {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  fileUrl       String
+  cloudinaryId  String
+  resolution    Int
+  colorSpace    String
+  createdAt     DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model OrderStatusHistory {
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id])
+  status      OrderStatus
+  changedBy   String?
+  notes       String?
+  createdAt   DateTime    @default(now())
+
+  @@index([orderId])
+}
+
+model Notification {
+  id           String            @id @default(uuid())
+  orderId      String
+  order        Order             @relation(fields: [orderId], references: [id])
+  channel      NotificationChannel
+  type         NotificationType
+  recipient    String
+  status       NotificationStatus
+  attempts     Int               @default(0)
+  lastAttempt  DateTime?
+  errorMessage String?
+  sentAt       DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  action      String
+  resource    String
+  resourceId  String?
+  changes     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
